@@ -2,131 +2,126 @@ import cv2
 import os
 import numpy as np
 import time
+from tensorflow.keras.models import load_model
 
 # Try to load pygame mixer for sound
 try:
     from pygame import mixer
     mixer.init()
-    sound = mixer.Sound('alarm.wav')
+    sound = mixer.Sound('Model/alarm.wav')
     use_sound = True
 except:
     use_sound = False
 
-face = cv2.CascadeClassifier(r'haar cascade files\haarcascade_frontalface_alt.xml')
-leye = cv2.CascadeClassifier(r'haar cascade files\haarcascade_lefteye_2splits.xml')
-reye = cv2.CascadeClassifier(r'haar cascade files\haarcascade_righteye_2splits.xml')
+# 1. Tải file bộ não AI
+model_path = os.path.join('Model', 'models', 'drowsiness_model.h5')
+model = load_model(model_path)
 
+# 2. Tải các file Haar Cascade để cắt khuôn mặt và mắt
 
+face_cascade = cv2.CascadeClassifier(r'Model\haar cascade files\haarcascade_frontalface_alt.xml')
+leye_cascade = cv2.CascadeClassifier(r'Model\haar cascade files\haarcascade_lefteye_2splits.xml')
+reye_cascade = cv2.CascadeClassifier(r'Model\haar cascade files\haarcascade_righteye_2splits.xml')
 
-lbl=['Close','Open']
+# 4 Nhãn tương ứng với model
+# Đảm bảo thứ tự nhãn trùng với thứ tự thư mục lúc train
+class_labels = ['Closed', 'Open', 'no_yawn', 'yawn']
 
-# Simple eye closure detection function (no Keras needed)
-def detect_eye_closed(eye_region):
-    """Detect if eye is closed using adaptive thresholding"""
-    if eye_region is None or eye_region.size == 0:
-        return 1
-    
-    h, w = eye_region.shape[:2]
-    if h < 5 or w < 5:
-        return 1
-    
-    gray = cv2.cvtColor(eye_region, cv2.COLOR_BGR2GRAY) if len(eye_region.shape) == 3 else eye_region
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
-    # Adaptive thresholding
-    thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                   cv2.THRESH_BINARY, 11, 2)
-    
-    # Histogram analysis - high dark pixels = closed eye
-    hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
-    hist = hist / (h * w)
-    dark_ratio = np.sum(hist[:80])  # pixels with intensity < 80
-    
-    # Laplacian variance - low variance = blurry = closed
-    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
-    
-    # Return 0 (closed) or 1 (open)
-    if dark_ratio > 0.55 and laplacian_var < 80:
-        return 0
-    return 1
-path = os.getcwd()
 cap = cv2.VideoCapture(0)
 font = cv2.FONT_HERSHEY_COMPLEX_SMALL
-count=0
-score=0
-thicc=2
-rpred=[99]
-lpred=[99]
+score = 0
+thicc = 2
 
 while(True):
     ret, frame = cap.read()
-    height,width = frame.shape[:2] 
-
+    if not ret:
+        break
+        
+    height, width = frame.shape[:2] 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    faces = face.detectMultiScale(gray,minNeighbors=5,scaleFactor=1.1,minSize=(25,25))
-    left_eye = leye.detectMultiScale(gray)
-    right_eye =  reye.detectMultiScale(gray)
+    # Phát hiện khuôn mặt và mắt
+    faces = face_cascade.detectMultiScale(gray, minNeighbors=5, scaleFactor=1.1, minSize=(25,25))
+    left_eye = leye_cascade.detectMultiScale(gray)
+    right_eye = reye_cascade.detectMultiScale(gray)
 
-    cv2.rectangle(frame, (0,height-50) , (200,height) , (0,0,0) , thickness=cv2.FILLED )
+    # Vẽ khung nền đen hiển thị trạng thái ở góc dưới
+    cv2.rectangle(frame, (0, height-60), (280, height), (0,0,0), thickness=cv2.FILLED)
 
-    for (x,y,w,h) in faces:
-        cv2.rectangle(frame, (x,y) , (x+w,y+h) , (100,100,100) , 1 )
-
-    for (x,y,w,h) in right_eye:
-        r_eye=frame[y:y+h,x:x+w]
-        count=count+1
-        rpred = detect_eye_closed(r_eye)
-        if(rpred==1):
-            lbl='Open' 
-        if(rpred==0):
-            lbl='Closed'
-        break
-
-    for (x,y,w,h) in left_eye:
-        l_eye=frame[y:y+h,x:x+w]
-        count=count+1
-        l_eye = cv2.cvtColor(l_eye,cv2.COLOR_BGR2GRAY)  
-        l_eye = cv2.resize(l_eye,(24,24))
-        l_eye= l_eye/255
-        l_eye=l_eye.reshape(24,24,-1)
-        l_eye = np.expand_dims(l_eye,axis=0)
-        lpred = model.predict_classes(l_eye)
-        if(lpred[0]==1):
-            lbl='Open'   
-        if(lpred[0]==0):
-            lbl='Closed'
-        break
-
-    if(rpred[0]==0 and lpred[0]==0):
-        score=score+1
-        cv2.putText(frame,"Closed",(10,height-20), font, 1,(255,255,255),1,cv2.LINE_AA)
-    # if(rpred[0]==1 or lpred[0]==1):
-    else:
-        score=score-1
-        cv2.putText(frame,"Open",(10,height-20), font, 1,(255,255,255),1,cv2.LINE_AA)
+    state_detected = "Open" # Mặc định
     
+    # Xử lý vùng mắt phải 
+    for (x, y, w, h) in right_eye:
+        r_eye = frame[y:y+h, x:x+w]
         
-    if(score<0):
-        score=0   
-    cv2.putText(frame,'Score:'+str(score),(100,height-20), font, 1,(255,255,255),1,cv2.LINE_AA)
-    if(score>15):
-        #person is feeling sleepy so we beep the alarm
-        cv2.imwrite(os.path.join(path,'image.jpg'),frame)
-        try:
-            sound.play()
-            
-        except:  # isplaying = False
-            pass
-        if(thicc<16):
-            thicc= thicc+2
-        else:
-            thicc=thicc-2
-            if(thicc<2):
-                thicc=2
-        cv2.rectangle(frame,(0,0),(width,height),(0,0,255),thicc) 
-    cv2.imshow('frame',frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+        # Tiền xử lý chuẩn ảnh 64x64 
+        r_eye = cv2.resize(r_eye, (64, 64))
+        r_eye = r_eye.astype('float32') / 255.0
+        r_eye = np.expand_dims(r_eye, axis=0)
+        
+        # Dự đoán nhãn
+        prediction = model.predict(r_eye, verbose=0)
+        pred_class = np.argmax(prediction)
+        state_detected = class_labels[pred_class]
         break
+
+    # Xử lý vùng mắt trái (Nếu mắt phải không tìm thấy thì check mắt trái)
+    if state_detected == "Open":
+        for (x, y, w, h) in left_eye:
+            l_eye = frame[y:y+h, x:x+w]
+            
+            # Tiền xử lý chuẩn ảnh 64x64 
+            l_eye = cv2.resize(l_eye, (64, 64))
+            l_eye = l_eye.astype('float32') / 255.0
+            l_eye = np.expand_dims(l_eye, axis=0)
+            
+            # Dự đoán nhãn
+            prediction = model.predict(l_eye, verbose=0)
+            pred_class = np.argmax(prediction)
+            state_detected = class_labels[pred_class]
+            break
+
+    # Vẽ khung vuông lên mặt tài xế
+    for (x, y, w, h) in faces:
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        
+        # Nếu đang ngáp (yawn) thì hiển thị cảnh báo ngay trên mặt
+        if state_detected == 'yawn':
+            cv2.putText(frame, "YAWNING!", (x, y-10), font, 1, (0, 0, 255), 2, cv2.LINE_AA)
+
+    # Tính toán điểm cảnh báo dựa trên trạng thái nhắm mắt (Closed) hoặc ngáp (yawn)
+    if state_detected == 'Closed' or state_detected == 'yawn':
+        score += 1
+        color = (0, 0, 255) # Màu đỏ cảnh báo
+    else:
+        score -= 1
+        color = (0, 255, 0) # Màu xanh an toàn
+        
+    if score < 0:
+        score = 0   
+        
+    # Hiển thị trạng thái hiện tại và Điểm buồn ngủ lên màn hình
+    cv2.putText(frame, f"State: {state_detected}", (10, height-40), font, 1, color, 1, cv2.LINE_AA)
+    cv2.putText(frame, f"Score: {score}", (10, height-15), font, 1, (255, 255, 255), 1, cv2.LINE_AA)
+    
+    # Nếu điểm vượt quá 15 điểm (Nhắm mắt hoặc ngáp quá lâu) -> Hú còi báo động
+    if score > 15:
+        if use_sound:
+            try:
+                sound.play()
+            except:
+                pass
+        # Vẽ viền đỏ nhấp nháy xung quanh màn hình camera
+        cv2.rectangle(frame, (0, 0), (width, height), (0, 0, 255), thicc)
+        thicc = thicc + 2 if thicc < 16 else 2
+
+    cv2.imshow('Driver Drowsiness Detection System', frame)
+    
+    # Nhường 30ms cho Windows vẽ hình và bắt phím 'q' để thoát
+    if cv2.waitKey(30) & 0xFF == ord('q'):
+        break
+
 cap.release()
 cv2.destroyAllWindows()
+    
+    # Bấm phím 'q' để tắt ứng dụng camera
