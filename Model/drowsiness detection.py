@@ -94,7 +94,7 @@ while(True):
         score += 1
         color = (0, 0, 255) # Màu đỏ cảnh báo
     else:
-        score -= 1
+        score = 0
         color = (0, 255, 0) # Màu xanh an toàn
         
     if score < 0:
@@ -114,6 +114,12 @@ while(True):
         # Vẽ viền đỏ nhấp nháy xung quanh màn hình camera
         cv2.rectangle(frame, (0, 0), (width, height), (0, 0, 255), thicc)
         thicc = thicc + 2 if thicc < 16 else 2
+    else:
+        if use_sound:
+            try:
+                sound.stop()
+            except:
+                pass
 
     cv2.imshow('Driver Drowsiness Detection System', frame)
     
