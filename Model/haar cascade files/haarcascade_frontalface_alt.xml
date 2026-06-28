@@ -146,20 +146,7 @@
             0 -1 16 7.3063157498836517e-02</internalNodes>
           <leafValues>
             4.3418860435485840e-01 7.0600342750549316e-01</leafValues></_>
-        <_>
-          <internalNodes>
-            0 -1 17 3.6767389974556863e-04</internalNodes>
-          <leafValues>
-            3.0278879404067993e-01 6.0515749454498291e-01</leafValues></_>
-        <_>
-          <internalNodes>
-            0 -1 18 -6.0479710809886456e-03</internalNodes>
-          <leafValues>
-            1.7984339594841003e-01 5.6752568483352661e-01</leafValues></_></weakClassifiers></_>
-    <_>
-      <maxWeakCount>21</maxWeakCount>
-      <stageThreshold>9.4985427856445312e+00</stageThreshold>
-      <weakClassifiers>
+        
         <_>
           <internalNodes>
             0 -1 19 -1.6510689631104469e-02</internalNodes>
